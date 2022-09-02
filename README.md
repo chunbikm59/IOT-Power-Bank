@@ -8,7 +8,7 @@
 - 可透過藍芽喚醒並傳送指令
 - 提供xh2.54與USB接口供外部IoT裝置溝通(UART)
 
-## Components
+## 材料
 - ESP32: FireBeetle 2 ESP32-E 
 - BLE: BT24
 - MOSFET: IRFZ44N
