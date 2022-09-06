@@ -130,11 +130,11 @@ void loop() {
     if(msg=="batt"){
       Serial.println("檢測剩餘電量...");
 //      3.294/ 2.6
-      int read_a = analogRead(battery_voltage);
-      Serial.print("analogRead:");;Serial.println(read_a);
-      float voltage = map(analogRead(battery_voltage), 0, 4095, 0, 3294);
-      voltage = map(voltage, 2510, 3294, 320, 420);
-      float life = map(voltage, 320, 420, 0, 100);
+      float voltage = analogRead(battery_voltage);
+      Serial.print("analogRead:");;Serial.println(voltage);
+      voltage = map(analogRead(battery_voltage), 2997, 4095, 317, 420);
+//      voltage = map(voltage, 0, 3294, 0, 420);
+      float life = map(voltage, 317, 420, 0, 100);
       Serial.print("電壓:");Serial.println(voltage);
       Serial.print("電量:");Serial.println(life);
       MySerial->write(("batt_vol="+String(float(voltage)/100, 3)+'\n').c_str()); //voltage
