@@ -1,5 +1,6 @@
 
 #include <Int64String.h>
+#include "EEPROM.h"
 
 //BT24藍芽模組
 int ble_rx = D12;
@@ -14,7 +15,11 @@ int battery_voltage = A1; //讀取電池電壓(經過分壓)
 int vout_gate = D3; //連接mosfet的gate，控制輸出供電與否，0斷電；1通電
 RTC_DATA_ATTR uint64_t  work_period = 5; //每隔多久喚醒供電(秒)
 RTC_DATA_ATTR uint64_t  work_time = 5; //每次供電多久(秒);
+RTC_DATA_ATTR int no_wakeup = 0; //永遠睡眠直到藍芽連線喚醒
 
+int ADDR_WORK_TIME = 0;
+int ADDR_WORK_PERIOD = sizeof(uint64_t);
+int ADDR_NO_WAKEUP = ADDR_WORK_PERIOD*2;
 //外接用電模組
 int fwd_rx=D7;
 int fwd_tx=D6;
@@ -55,11 +60,12 @@ void enter_sleep(){
   Serial1.write(String("AT+RESET\r\n").c_str()); //以防意外退出低功耗模式
   //設定喚醒腳位
   //esp_sleep_enable_ext1_wakeup(ble_hex_state, ESP_EXT1_WAKEUP_ANY_HIGH); //0x11即gpio 4
-  if(work_period>0){
+  if(!no_wakeup){
     esp_sleep_enable_timer_wakeup(work_period * uS_TO_S_FACTOR);  
+  }
+  if(work_period!=0){
     esp_sleep_enable_ext0_wakeup(ble_state_gpio, 1); //1 = High, 0 = Low
     esp_deep_sleep_start(); 
-    
   }  
   Serial.println("工作週期設為0不會進入睡眠");
 }
@@ -80,8 +86,12 @@ void bt24_enter_setting_mode(){
   delay(500);
 }
 void setup() {
+  EEPROM.begin(64);
+  work_time = EEPROM.readLong64(ADDR_WORK_TIME);
+  work_period = EEPROM.readLong64(ADDR_WORK_PERIOD);
+  no_wakeup = EEPROM.readLong64(ADDR_NO_WAKEUP);
 //  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT1 );
-  
+
   pinMode(ble_disconnect, INPUT);
   pinMode(ble_setting_mode, INPUT);
   pinMode(battery_voltage, INPUT);
@@ -130,15 +140,16 @@ void loop() {
     if(msg=="batt"){
       Serial.println("檢測剩餘電量...");
 //      3.294/ 2.6
-      float voltage = analogRead(battery_voltage);
-      Serial.print("analogRead:");;Serial.println(voltage);
-      voltage = map(analogRead(battery_voltage), 2997, 4095, 317, 420);
+      float voltage_raw = analogRead(battery_voltage);
+      Serial.print("analogRead:");;Serial.println(voltage_raw);
+//      float voltage = map(voltage_raw, 1518, 2455, 320, 420);
 //      voltage = map(voltage, 0, 3294, 0, 420);
-      float life = map(voltage, 317, 420, 0, 100);
+      double voltage = 0.0015569*voltage_raw + 0.3746284;
+      double life = map(voltage*100, 320, 420, 0, 100);
       Serial.print("電壓:");Serial.println(voltage);
       Serial.print("電量:");Serial.println(life);
-      MySerial->write(("batt_vol="+String(float(voltage)/100, 3)+'\n').c_str()); //voltage
-      MySerial->write(("batt_life="+String(float(life), 3)+'\n').c_str()); //mah
+      MySerial->write(("batt_vol="+String(voltage)+'\n').c_str()); //voltage
+      MySerial->write(("batt_life="+String(life)+'\n').c_str()); //mah
     }
 
     //供電
@@ -158,6 +169,8 @@ void loop() {
     //設定供電週期 0表示不進入睡眠
     else if(msg.substring(0,7)=="period="){
       work_period = msg.substring(7).toInt();
+      EEPROM.writeULong64(ADDR_WORK_PERIOD, work_period);
+      EEPROM.commit();
       MySerial->write("Success\n");
     }
     if(msg=="worktime"){
@@ -166,6 +179,19 @@ void loop() {
     //最大清醒時間，中間有輸入則自動延長，超過自動進入睡眠 0表示無限
     if(msg.substring(0,9)=="worktime="){
       work_time = msg.substring(9).toInt();
+      EEPROM.writeULong64(ADDR_WORK_TIME, work_time);
+      EEPROM.commit();
+      MySerial->write("Success\n");
+    }
+    //永久睡眠設定 read
+    else if(msg=="no_wakeup"){
+      MySerial->write(String("no_wakeup="+String(no_wakeup)+"\n").c_str());
+    }
+    //永久睡眠設定 write
+    else if(msg.substring(0,10)=="no_wakeup="){
+      no_wakeup = msg.substring(10).toInt();
+      EEPROM.writeULong64(ADDR_NO_WAKEUP, no_wakeup);
+      EEPROM.commit();
       MySerial->write("Success\n");
     }
     //藍芽轉送指令給外接模組
@@ -205,9 +231,11 @@ void loop() {
     }
   }
   //超時進入睡眠
+  
   if(((millis()-runTime) > work_time*1000) and work_time!=0){
     //連線中不進入睡眠
     if(digitalRead(ble_state)==0){
+      Serial.println("藍芽未連線...");
       enter_sleep();  
     }
     
