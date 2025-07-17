@@ -1,6 +1,6 @@
 # IOT-Power-Bank
 
-![裝置照片](image.jpg)
+<img src="image.jpg" alt="裝置照片" width="250">
 
 ## 專案簡介
 IOT-Power-Bank 是一款專為 IoT 裝置設計的低功耗智慧電源管理模組，支援週期性供電、藍牙喚醒與電量查詢，適合長時間運作且需遠端管理的應用場景。
